@@ -9,7 +9,7 @@ from sae import get_peft_sae_model
 from sae.launch.config import ModelArguments, SaeConfig, TrainingArguments
 from sae.trainer import SaeTrainer
 from sae.utils import hf_processor, hf_tokenizer
-from sae.utils.datasets import CacheDataset
+from sae.utils.datasets import CacheDataset, CacheIterableDataset
 from sae.utils.factory import ModelFactory, SaeFactory
 
 try:
@@ -47,18 +47,29 @@ def main():
     model.print_trainable_parameters()
 
     dataset = datasets.load_dataset(
-        trainer_args.dataset_path, split=trainer_args.split, name=trainer_args.subset
+        trainer_args.dataset_path, split=trainer_args.split, name=trainer_args.subset, streaming=trainer_args.streaming
     )
 
-    sae_dataset = CacheDataset(
-        dataset=dataset,
-        tokenizer=tokenizer,
-        processor=processor,
-        text_key=trainer_args.text_key,
-        image_key=trainer_args.image_key,
-        video_key=trainer_args.video_key,
-        audio_key=trainer_args.audio_key,
-    )
+    if trainer_args.streaming:
+        sae_dataset = CacheIterableDataset(
+            dataset=dataset,
+            tokenizer=tokenizer,
+            processor=processor,
+            text_key=trainer_args.text_key,
+            image_key=trainer_args.image_key,
+            video_key=trainer_args.video_key,
+            audio_key=trainer_args.audio_key,
+        )
+    else:
+        sae_dataset = CacheDataset(
+            dataset=dataset,
+            tokenizer=tokenizer,
+            processor=processor,
+            text_key=trainer_args.text_key,
+            image_key=trainer_args.image_key,
+            video_key=trainer_args.video_key,
+            audio_key=trainer_args.audio_key,
+        )
 
     trainer = SaeTrainer(
         model=model,

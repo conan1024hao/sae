@@ -1,3 +1,3 @@
-from .cache_dataset import CacheDataset, DataCollator
+from .cache_dataset import CacheDataset, CacheIterableDataset, DataCollator
 
-__all__ = ["CacheDataset", "DataCollator"]
+__all__ = ["CacheDataset", "CacheIterableDataset", "DataCollator"]

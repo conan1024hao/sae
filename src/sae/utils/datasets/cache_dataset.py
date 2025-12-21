@@ -4,8 +4,25 @@ from typing import Dict, List, Optional, Sequence, Union
 
 import torch
 from datasets import Dataset as HFDataset
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, IterableDataset
 from transformers import PreTrainedTokenizer, ProcessorMixin
+
+
+def convert_to_standard_chat(example, num_images=0):
+    if isinstance(example, list) and example and isinstance(example[0], dict) and "role" in example[0] and "content" in example[0]:
+        return example
+
+    standard_chat = []
+
+    for message in example:
+        standard_chat.append({"role": "user", "content": [{"text": message["user"], "type": "text"}]})
+        standard_chat.append({"role": "assistant", "content": [{"text": message["assistant"], "type": "text"}]})
+    
+    if num_images > 0:
+        for _ in range(num_images):
+            standard_chat[0]["content"] = [{"type": "image"}] + standard_chat[0]["content"]
+
+    return standard_chat
 
 
 @dataclass
@@ -81,10 +98,6 @@ class CacheDataset(Dataset):
         row = self.dataframe[index]
 
         if self.processor is not None:
-            # By default we assume
-            text = self.processor.apply_chat_template(
-                row[self.text_key], tokenize=False, add_generation_prompt=False
-            )
             multi_modal_inputs = {}
             images = None
             if self.image_key in row:
@@ -100,6 +113,12 @@ class CacheDataset(Dataset):
             if self.audio_key in row:
                 audios = [audio for audio in row[self.audio_key]]
                 multi_modal_inputs["audios"] = audios
+
+            text = self.processor.apply_chat_template(
+                convert_to_standard_chat(row[self.text_key], num_images=len(multi_modal_inputs.get("images", []))),
+                tokenize=False,
+                add_generation_prompt=False
+            )
 
             model_inputs = self.processor(
                 text=[text], return_tensors="pt", **multi_modal_inputs
@@ -117,3 +136,92 @@ class CacheDataset(Dataset):
 
     def __len__(self):
         return len(self.dataframe)
+
+
+class CacheIterableDataset(IterableDataset):
+    def __init__(
+        self,
+        dataset: Union[IterableDataset, str], # Expects an iterable or path
+        tokenizer: PreTrainedTokenizer,
+        processor: Optional[ProcessorMixin],
+        text_key: str,
+        image_key: Optional[str] = None,
+        video_key: Optional[str] = None,
+        audio_key: Optional[str] = None,
+    ):
+        super().__init__()
+
+        if isinstance(dataset, str):
+            dataset = load_dataset(dataset, streaming=True, split="train")
+        else:
+            dataset = dataset
+        
+        if isinstance(dataset, HFDataset):
+            dataset = dataset.to_iterable_dataset()
+
+        self.tokenizer = tokenizer
+        self.processor = processor
+        self.image_key = image_key
+        self.video_key = video_key
+        self.audio_key = audio_key
+        self.text_key = text_key
+        self.dataset = dataset
+
+    def process_item(self, row):
+        """
+        Logic extracted from the old __getitem__. 
+        Processes a single row into model inputs.
+        """
+        if self.processor is not None:
+            multi_modal_inputs = {}
+            if self.image_key in row and row[self.image_key]:
+                for img in row[self.image_key]:
+                    w, h = img.size
+                    ar = max(w / h, h / w)
+                    # Skip images with extreme aspect ratios
+                    if ar >= 200:
+                        return None
+                multi_modal_inputs["images"] = row[self.image_key]
+            # Only process single-image examples for now
+            num_images = len(multi_modal_inputs.get("images", []))
+            if num_images != 1:
+                return None
+
+            if self.video_key in row and row[self.video_key]:
+                multi_modal_inputs["videos"] = row[self.video_key]
+
+            if self.audio_key in row and row[self.audio_key]:
+                multi_modal_inputs["audios"] = row[self.audio_key]
+
+            text = self.processor.apply_chat_template(
+                convert_to_standard_chat(row[self.text_key], num_images=num_images),
+                tokenize=False,
+                add_generation_prompt=False,
+            )
+
+            model_inputs = self.processor(
+                text=[text],
+                return_tensors="pt",
+                max_length=8192,
+                truncation=True,
+                **multi_modal_inputs,
+            )
+        else:
+            text = self.tokenizer.apply_chat_template(
+                row[self.text_key], tokenize=False, add_generation_prompt=False
+            )
+            model_inputs = self.tokenizer([text], return_tensors="pt")
+
+        return model_inputs
+
+    def __iter__(self):
+        """
+        Instead of getting an index, we iterate through the stream.
+        """
+        for row in self.dataset:
+            item = self.process_item(row)
+            if item is not None:
+                yield item
+
+    def get_collator(self):
+        return DataCollator(self.tokenizer, self.processor)

@@ -14,6 +14,7 @@ class TrainingArguments(transformers.TrainingArguments):
     video_key: Optional[str] = "videos"
     audio_key: Optional[str] = "audios"
     aux_alpha: Optional[float] = 0.1
+    streaming: Optional[bool] = False
 
 
 @dataclass
