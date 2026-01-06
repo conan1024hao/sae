@@ -29,6 +29,8 @@ dependencies = [
     "deepspeed",
     "hf_transfer",
     "wandb",
+    "qwen_vl_utils",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
