@@ -2,7 +2,7 @@ from sae.utils.registry import register_sae_method
 
 from ...utils import SaeType
 from .config import TopKSaeConfig
-from .layer import TopKSaeLayer
+from .layer import TopKSaeLayer, Linear
 from .model import TopKSaeModel
 
 register_sae_method(
@@ -18,4 +18,5 @@ __all__ = [
     "TopKSaeConfig",
     "TopKSaeModel",
     "TopKSaeLayer",
+    "Linear"
 ]

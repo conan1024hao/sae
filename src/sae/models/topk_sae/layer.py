@@ -121,6 +121,10 @@ class Linear(nn.Module, TopKSaeLayer):
         )
         self.num_tokens_fired = torch.zeros(num_latents, dtype=torch.int64)
         self.dead_tokens_threshold = dead_tokens_threshold
+        
+        self.enable_sae_steering = False
+        self.steering_feature_ids = None
+        self.steering_clamp_value = None
 
     def eager_decode(
         self, top_indices: torch.Tensor, top_acts: torch.Tensor, W_dec: torch.Tensor
@@ -154,7 +158,21 @@ class Linear(nn.Module, TopKSaeLayer):
                 # Remove decoder bias as per Anthropic
                 sae_in = result - bias
                 pre_act: torch.Tensor = encoder(sae_in)
-                top_acts, top_indices = pre_act.topk(k, sorted=False)
+
+                if not self.enable_sae_steering:
+                    top_acts, top_indices = pre_act.topk(k, sorted=False)
+                else:
+                    # SAE Steering Logic
+                    latents = pre_act
+                    # Clamp specified features
+                    for feature in self.steering_feature_ids:
+                        if latents.dim() == 2:
+                            latents[:, feature] = self.steering_clamp_value
+                        elif latents.dim() == 3:
+                            latents[:, :, feature] = self.steering_clamp_value
+                    # Get top k after clamping
+                    top_acts, top_indices = latents.topk(k, sorted=False)
+
                 sae_out = self.eager_decode(top_indices, top_acts, W_dec.mT)
                 sae_out = sae_out + bias
                 for indice in top_indices:
