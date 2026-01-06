@@ -21,7 +21,7 @@ classifiers = [
 requires-python = ">=3.8"
 license = { text = "MIT" }
 dependencies = [
-    "peft",
+    "peft==0.16.0",
     "transformers",
     "datasets",
     "torchvision",
