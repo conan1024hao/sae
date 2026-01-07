@@ -6,6 +6,7 @@ import torch.nn as nn
 from peft.tuners.tuners_utils import BaseTunerLayer
 
 from .config import TopKSaeConfig
+import os
 
 
 class TopKSaeLayer(BaseTunerLayer):
@@ -126,6 +127,9 @@ class Linear(nn.Module, TopKSaeLayer):
         self.steering_feature_ids = None
         self.steering_clamp_value = None
 
+        self.cache_activations = False
+        self.activation_path = None
+
     def eager_decode(
         self, top_indices: torch.Tensor, top_acts: torch.Tensor, W_dec: torch.Tensor
     ):
@@ -172,6 +176,20 @@ class Linear(nn.Module, TopKSaeLayer):
                             latents[:, :, feature] = self.steering_clamp_value
                     # Get top k after clamping
                     top_acts, top_indices = latents.topk(k, sorted=False)
+
+                # Cache activations if enabled
+                if self.cache_activations and self.activation_path is not None:
+                    activation_value = top_acts.detach().cpu()
+                    indices_value = top_indices.detach().cpu()
+                    cached_data = {"activations": [], "indices": []}
+                    if os.path.exists(self.activation_path):
+                        cached_data = torch.load(self.activation_path)
+                    cached_data["activations"].append(activation_value)
+                    cached_data["indices"].append(indices_value)
+                    activation_dir = os.path.dirname(self.activation_path)
+                    if activation_dir:
+                        os.makedirs(activation_dir, exist_ok=True)
+                    torch.save(cached_data, self.activation_path)
 
                 sae_out = self.eager_decode(top_indices, top_acts, W_dec.mT)
                 sae_out = sae_out + bias
