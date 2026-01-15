@@ -182,11 +182,13 @@ class Linear(nn.Module, TopKSaeLayer):
                 if self.cache_activations and self.activation_path is not None:
                     activation_value = top_acts.detach().cpu()
                     indices_value = top_indices.detach().cpu()
-                    cached_data = {"activations": [], "indices": [], "origin_out": [], "sae_out": []}
+                    latents_value = pre_act.detach().cpu()
+                    cached_data = {"activations": [], "indices": [], "latents": [], "origin_out": [], "sae_out": []}
                     if os.path.exists(self.activation_path):
                         cached_data = torch.load(self.activation_path)
                     cached_data["activations"].append(activation_value)
                     cached_data["indices"].append(indices_value)
+                    cached_data["latents"].append(latents_value)
                     activation_dir = os.path.dirname(self.activation_path)
                     if activation_dir:
                         os.makedirs(activation_dir, exist_ok=True)
