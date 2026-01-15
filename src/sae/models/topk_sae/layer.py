@@ -145,6 +145,7 @@ class Linear(nn.Module, TopKSaeLayer):
             final_result = result
         else:
             result = self.base_layer(x, *args, **kwargs)
+            original_result = result
             torch_result_dtype = result.dtype
             # If we use sae, sae is reconstruction, we add and avg multiple saes
             final_result = torch.zeros_like(result, dtype=torch_result_dtype)
@@ -181,7 +182,7 @@ class Linear(nn.Module, TopKSaeLayer):
                 if self.cache_activations and self.activation_path is not None:
                     activation_value = top_acts.detach().cpu()
                     indices_value = top_indices.detach().cpu()
-                    cached_data = {"activations": [], "indices": []}
+                    cached_data = {"activations": [], "indices": [], "origin_out": [], "sae_out": []}
                     if os.path.exists(self.activation_path):
                         cached_data = torch.load(self.activation_path)
                     cached_data["activations"].append(activation_value)
@@ -199,6 +200,14 @@ class Linear(nn.Module, TopKSaeLayer):
 
             final_result /= len(self.active_adapters)
             final_result = final_result.to(torch_result_dtype)
+            
+            if self.cache_activations and self.activation_path is not None:
+                origin_out = original_result.detach().cpu()
+                sae_out = final_result.detach().cpu()
+                cached_data = torch.load(self.activation_path)
+                cached_data["origin_out"].append(origin_out)
+                cached_data["sae_out"].append(sae_out)
+                torch.save(cached_data, self.activation_path)
 
         return final_result
 
