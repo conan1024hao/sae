@@ -31,6 +31,7 @@ dependencies = [
     "wandb",
     "qwen_vl_utils",
     "python-dotenv",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]
