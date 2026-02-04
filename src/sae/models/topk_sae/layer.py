@@ -156,6 +156,7 @@ class Linear(nn.Module, TopKSaeLayer):
                 num_tokens = result.shape[0]
 
             assert len(self.active_adapters) == 1, "Only one active adapter is supported in TopK SAE."
+            activate_adapter = self.active_adapters[0]
 
             encoder = self.sae_encoder[activate_adapter]
             W_dec = self.sae_W_dec[activate_adapter]
