@@ -32,6 +32,7 @@ dependencies = [
     "qwen_vl_utils",
     "python-dotenv",
     "scikit-learn",
+    "matplotlib",
 ]
 
 [project.optional-dependencies]
