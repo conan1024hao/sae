@@ -205,8 +205,7 @@ class Linear(nn.Module, TopKSaeLayer):
                 cached_data["origin_out"] = origin_out
                 cached_data["sae_out"] = sae_out
 
-                activation_dir = os.path.dirname(self.activation_path)
-                os.makedirs(activation_dir, exist_ok=True)
+                os.makedirs(self.activation_path, exist_ok=True)
                 torch.save(cached_data, os.path.join(self.activation_path, f"step_{self.cache_step}.pt"))
                 self.cache_step += 1
 
