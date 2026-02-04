@@ -128,6 +128,7 @@ class Linear(nn.Module, TopKSaeLayer):
         self.steering_clamp_value = None
 
         self.cache_activations = False
+        self.cache_step = 0
         self.activation_path = None
 
     def eager_decode(
@@ -154,62 +155,59 @@ class Linear(nn.Module, TopKSaeLayer):
             else:
                 num_tokens = result.shape[0]
 
-            for activate_adapter in self.active_adapters:
-                encoder = self.sae_encoder[activate_adapter]
-                W_dec = self.sae_W_dec[activate_adapter]
-                bias = self.sae_b_dec[activate_adapter]
-                k = self.k[activate_adapter]
-                result = self._cast_input_dtype(result, encoder.weight.dtype)
-                # Remove decoder bias as per Anthropic
-                sae_in = result - bias
-                pre_act: torch.Tensor = encoder(sae_in)
+            assert len(self.active_adapters) == 1, "Only one active adapter is supported in TopK SAE."
 
-                if not self.enable_sae_steering:
-                    top_acts, top_indices = pre_act.topk(k, sorted=False)
-                else:
-                    # SAE Steering Logic
-                    latents = pre_act
-                    # Clamp specified features
-                    for feature in self.steering_feature_ids:
-                        if latents.dim() == 2:
-                            latents[:, feature] = self.steering_clamp_value
-                        elif latents.dim() == 3:
-                            latents[:, :, feature] = self.steering_clamp_value
-                    # Get top k after clamping
-                    top_acts, top_indices = latents.topk(k, sorted=False)
+            encoder = self.sae_encoder[activate_adapter]
+            W_dec = self.sae_W_dec[activate_adapter]
+            bias = self.sae_b_dec[activate_adapter]
+            k = self.k[activate_adapter]
+            result = self._cast_input_dtype(result, encoder.weight.dtype)
+            # Remove decoder bias as per Anthropic
+            sae_in = result - bias
+            pre_act: torch.Tensor = encoder(sae_in)
 
-                # Cache activations if enabled
-                if self.cache_activations and self.activation_path is not None:
-                    activation_value = top_acts.detach().cpu()
-                    indices_value = top_indices.detach().cpu()
-                    latents_value = pre_act.detach().cpu()
-                    cached_data = {"activations": [], "indices": [], "latents": [], "origin_out": [], "sae_out": []}
-                    if os.path.exists(self.activation_path):
-                        cached_data = torch.load(self.activation_path)
-                    cached_data["activations"].append(activation_value)
-                    cached_data["indices"].append(indices_value)
-                    cached_data["latents"].append(latents_value)
-                    activation_dir = os.path.dirname(self.activation_path)
-                    if activation_dir:
-                        os.makedirs(activation_dir, exist_ok=True)
-                    torch.save(cached_data, self.activation_path)
+            if not self.enable_sae_steering:
+                top_acts, top_indices = pre_act.topk(k, sorted=False)
+            else:
+                # SAE Steering Logic
+                latents = pre_act
+                # Clamp specified features
+                for feature in self.steering_feature_ids:
+                    if latents.dim() == 2:
+                        latents[:, feature] = self.steering_clamp_value
+                    elif latents.dim() == 3:
+                        latents[:, :, feature] = self.steering_clamp_value
+                # Get top k after clamping
+                top_acts, top_indices = latents.topk(k, sorted=False)
 
-                sae_out = self.eager_decode(top_indices, top_acts, W_dec.mT)
-                sae_out = sae_out + bias
-                for indice in top_indices:
-                    self.num_tokens_fired[indice.cpu()] += num_tokens
-                final_result += sae_out
+            sae_out = self.eager_decode(top_indices, top_acts, W_dec.mT)
+            sae_out = sae_out + bias
+            for indice in top_indices:
+                self.num_tokens_fired[indice.cpu()] += num_tokens
+            final_result += sae_out
 
             final_result /= len(self.active_adapters)
             final_result = final_result.to(torch_result_dtype)
-            
+
+           # Cache activations if enabled 
             if self.cache_activations and self.activation_path is not None:
+                activation_value = top_acts.detach().cpu()
+                indices_value = top_indices.detach().cpu()
+                latents_value = pre_act.detach().cpu()
                 origin_out = original_result.detach().cpu()
                 sae_out = final_result.detach().cpu()
-                cached_data = torch.load(self.activation_path)
-                cached_data["origin_out"].append(origin_out)
-                cached_data["sae_out"].append(sae_out)
-                torch.save(cached_data, self.activation_path)
+
+                cached_data = {}
+                cached_data["activations"] = activation_value
+                cached_data["indices"] = indices_value
+                cached_data["latents"] = latents_value
+                cached_data["origin_out"] = origin_out
+                cached_data["sae_out"] = sae_out
+
+                activation_dir = os.path.dirname(self.activation_path)
+                os.makedirs(activation_dir, exist_ok=True)
+                torch.save(cached_data, os.path.join(self.activation_path, f"step_{self.cache_step}.pt"))
+                self.cache_step += 1
 
         return final_result
 
