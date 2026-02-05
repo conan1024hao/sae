@@ -130,6 +130,9 @@ class Linear(nn.Module, TopKSaeLayer):
         self.cache_activations = False
         self.cache_step = 0
         self.activation_path = None
+        
+        self.vision_start = None
+        self.vision_end = None
 
     def eager_decode(
         self, top_indices: torch.Tensor, top_acts: torch.Tensor, W_dec: torch.Tensor
@@ -199,11 +202,18 @@ class Linear(nn.Module, TopKSaeLayer):
                 sae_out = final_result.detach().cpu()
 
                 cached_data = {}
-                cached_data["activations"] = activation_value
-                cached_data["indices"] = indices_value
-                cached_data["latents"] = latents_value
-                cached_data["origin_out"] = origin_out
-                cached_data["sae_out"] = sae_out
+                if self.vision_start is not None and self.vision_end is not None:
+                    cached_data["activations"] = activation_value[:, self.vision_start+1:self.vision_end, :]
+                    cached_data["indices"] = indices_value[:, self.vision_start+1:self.vision_end, :]
+                    cached_data["latents"] = latents_value[:, self.vision_start+1:self.vision_end, :]
+                    cached_data["origin_out"] = origin_out[:, self.vision_start+1:self.vision_end, :]
+                    cached_data["sae_out"] = sae_out[:, self.vision_start+1:self.vision_end, :]
+                else:
+                    cached_data["activations"] = activation_value
+                    cached_data["indices"] = indices_value
+                    cached_data["latents"] = latents_value
+                    cached_data["origin_out"] = origin_out
+                    cached_data["sae_out"] = sae_out
 
                 os.makedirs(self.activation_path, exist_ok=True)
                 torch.save(cached_data, os.path.join(self.activation_path, f"step_{self.cache_step}.pt"))
