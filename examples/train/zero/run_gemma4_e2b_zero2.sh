@@ -24,6 +24,14 @@ TARGET_MODULE="model.embed_vision.embedding_projection"
 #   dataset object in this process; a DataLoader worker would consume rows in its own
 #   copy, so the recorded position would never advance. It also removes the worker-side
 #   HTTP client whose failure killed the first attempt at step 6203.
+#
+# --save_steps 250
+#   Streaming dies every ~750 steps with "Cannot send a request, as the client has been
+#   closed" (huggingface_hub keeps a module-level httpx client; once something closes it,
+#   every component still holding the old reference fails permanently). auto_resume.sh
+#   restarts from the newest checkpoint, so the save interval has to stay comfortably
+#   below the crash interval -- otherwise the run never reaches the next checkpoint and
+#   retries the same segment forever.
 
 torchrun --nproc_per_node="8" --nnodes="1" --node_rank="0" --master_addr="127.0.0.1" --master_port="1234" \
     src/sae/launch/train.py \
@@ -42,7 +50,7 @@ torchrun --nproc_per_node="8" --nnodes="1" --node_rank="0" --master_addr="127.0.
     --max_steps 31250 \
     --learning_rate 5e-5 \
     --logging_steps 1 \
-    --save_steps 1000 \
+    --save_steps 250 \
     --output_dir checkpoints/$RUN_NAME \
     --save_total_limit 5 \
     --deepspeed ./examples/train/zero/zero2.json \
