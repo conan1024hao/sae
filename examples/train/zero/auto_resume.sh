@@ -29,7 +29,14 @@ while :; do
 
     if [ -n "${latest}" ]; then
         echo "[auto_resume] attempt ${attempt}: resuming from checkpoint-${latest}"
-        bash "${SCRIPT}" --resume_from_checkpoint "${OUTPUT_DIR}/checkpoint-${latest}"
+        # --ignore_data_skip disables the Trainer's replay-based skip, which is far too
+        # slow on a large streaming dataset. train.py seeks the stream to the position
+        # recorded in the checkpoint instead, which is exact and instant. Checkpoints
+        # written before that mechanism existed have no recorded position; train.py warns
+        # and those samples get seen a second time.
+        bash "${SCRIPT}" \
+            --resume_from_checkpoint "${OUTPUT_DIR}/checkpoint-${latest}" \
+            --ignore_data_skip
     else
         echo "[auto_resume] attempt ${attempt}: no checkpoint found, starting fresh"
         bash "${SCRIPT}"

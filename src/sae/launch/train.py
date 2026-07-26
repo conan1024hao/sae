@@ -7,7 +7,7 @@ import wandb
 
 from sae import get_peft_sae_model
 from sae.launch.config import ModelArguments, SaeConfig, TrainingArguments
-from sae.trainer import SaeTrainer
+from sae.trainer import DatasetStateCallback, SaeTrainer, load_dataset_state
 from sae.utils import hf_processor, hf_tokenizer
 from sae.utils.datasets import CacheDataset, CacheIterableDataset
 from sae.utils.factory import ModelFactory, SaeFactory
@@ -71,15 +71,46 @@ def main():
             audio_key=trainer_args.audio_key,
         )
 
+    callbacks = []
+    resume_from_checkpoint = trainer_args.resume_from_checkpoint
+
+    if trainer_args.streaming:
+        # Record the stream position in every checkpoint so a resume can seek to it
+        # instead of replaying the stream (see sae.trainer.dataset_state).
+        CacheIterableDataset.assert_stateful(trainer_args.dataloader_num_workers)
+        callbacks.append(DatasetStateCallback(sae_dataset))
+
+        if resume_from_checkpoint:
+            if load_dataset_state(sae_dataset, resume_from_checkpoint):
+                # The stream is already positioned, so the Trainer must not replay it.
+                trainer_args.ignore_data_skip = True
+                print(f"[sae] restored stream position from {resume_from_checkpoint}")
+            elif trainer_args.ignore_data_skip:
+                print(
+                    f"[sae] WARNING: {resume_from_checkpoint} has no recorded stream "
+                    "position and --ignore_data_skip is set, so the stream restarts from "
+                    "the beginning: every sample consumed before this checkpoint will be "
+                    "seen a second time."
+                )
+            else:
+                print(
+                    f"[sae] WARNING: {resume_from_checkpoint} has no recorded stream "
+                    "position, so the Trainer will replay the stream from the start. "
+                    "On a large streaming dataset this can take many hours; pass "
+                    "--ignore_data_skip to start immediately at the cost of seeing the "
+                    "samples before this checkpoint a second time."
+                )
+
     trainer = SaeTrainer(
         model=model,
         args=trainer_args,
         data_collator=sae_dataset.get_collator(),
         train_dataset=sae_dataset,
+        callbacks=callbacks,
     )
     # `Trainer.train()` does not read `args.resume_from_checkpoint`, so the CLI flag is
     # silently ignored unless it is forwarded here. Defaults to None for fresh runs.
-    trainer.train(resume_from_checkpoint=trainer_args.resume_from_checkpoint)
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
 
 if __name__ == "__main__":

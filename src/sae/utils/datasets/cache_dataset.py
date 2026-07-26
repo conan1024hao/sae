@@ -248,5 +248,33 @@ class CacheIterableDataset(IterableDataset):
             if item is not None:
                 yield item
 
+    def state_dict(self):
+        """Position of the underlying stream, so a resume can jump straight to it.
+
+        Re-reading a streaming dataset up to a given step is prohibitively slow
+        (FineVisionMax is 24M rows over 10k shards), so we checkpoint the shard index
+        and row offset instead of relying on the Trainer's replay-based data skip.
+
+        Only meaningful when `dataloader_num_workers == 0`: with a worker process the
+        rows are consumed in the worker's copy of the dataset and this object never
+        advances. `assert_stateful()` enforces that.
+        """
+        return self.dataset.state_dict()
+
+    def load_state_dict(self, state_dict) -> None:
+        """Restore a stream position previously captured by `state_dict`."""
+        self.dataset.load_state_dict(state_dict)
+
+    @staticmethod
+    def assert_stateful(dataloader_num_workers: int) -> None:
+        """Guard against silently checkpointing a stream position that never advances."""
+        if dataloader_num_workers != 0:
+            raise ValueError(
+                "Stream-position checkpointing requires --dataloader_num_workers 0; "
+                f"got {dataloader_num_workers}. With a worker process the rows are "
+                "consumed in the worker's copy of the dataset, so the saved position "
+                "would always point at the start of the stream."
+            )
+
     def get_collator(self):
         return DataCollator(self.tokenizer, self.processor)
