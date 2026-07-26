@@ -77,7 +77,9 @@ def main():
         data_collator=sae_dataset.get_collator(),
         train_dataset=sae_dataset,
     )
-    trainer.train()
+    # `Trainer.train()` does not read `args.resume_from_checkpoint`, so the CLI flag is
+    # silently ignored unless it is forwarded here. Defaults to None for fresh runs.
+    trainer.train(resume_from_checkpoint=trainer_args.resume_from_checkpoint)
 
 
 if __name__ == "__main__":
