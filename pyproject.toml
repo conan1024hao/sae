@@ -21,8 +21,9 @@ classifiers = [
 requires-python = ">=3.8"
 license = { text = "MIT" }
 dependencies = [
-    "peft==0.16.0",
-    "transformers==4.56.0",
+    # transformers>=5.5 is required for Gemma 4 (`Gemma4ForConditionalGeneration`)
+    "peft>=0.19,<0.20",
+    "transformers>=5.9,<6",
     "datasets",
     "torchvision",
     "accelerate",

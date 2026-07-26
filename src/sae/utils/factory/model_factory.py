@@ -18,7 +18,7 @@ class ModelFactory:
 
     @staticmethod
     def create_hf_model(
-        model_name: str, torch_dtype, attn_implementation: str = "sdpa", **kwargs
+        model_name: str, dtype, attn_implementation: str = "sdpa", **kwargs
     ) -> transformers.PreTrainedModel:
         """
         Create a Hugging Face model for the given model name.
@@ -52,7 +52,7 @@ class ModelFactory:
         model = model_class.from_pretrained(
             model_name,
             attn_implementation=attn_implementation,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
 
         return model

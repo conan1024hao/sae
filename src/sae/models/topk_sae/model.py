@@ -119,11 +119,13 @@ class TopKSaeModel(BaseSaeModel):
         """
         self._set_adapter_layers(enabled=False)
 
-    def set_adapter(self, adapter_name: Union[str, list[str]]) -> None:
+    def set_adapter(
+        self, adapter_name: Union[str, list[str]], inference_mode: bool = False
+    ) -> None:
         """Set the active adapter(s).
 
-        Additionally, this function will set the specified adapters to trainable (i.e., requires_grad=True). If this is
-        not desired, use the following code.
+        Additionally, this function will set the specified adapters to trainable (i.e., requires_grad=True) unless
+        `inference_mode` is True. If this is not desired, use the following code.
 
         ```py
         >>> for name, param in model_peft.named_parameters():
@@ -133,10 +135,13 @@ class TopKSaeModel(BaseSaeModel):
 
         Args:
             adapter_name (`str` or `list[str]`): Name of the adapter(s) to be activated.
+            inference_mode (`bool`, *optional*):
+                Whether the activated adapter should be frozen (i.e. `requires_grad=False`). Defaults to False.
+                `peft>=0.19` passes this from `BaseTuner.inject_adapter`.
         """
         for module in self.model.modules():
             if isinstance(module, TopKSaeLayer):
-                module.set_adapter(adapter_name)
+                module.set_adapter(adapter_name, inference_mode=inference_mode)
         self.active_adapter = adapter_name
 
     def _set_adapter_layers(self, enabled: bool = True) -> None:

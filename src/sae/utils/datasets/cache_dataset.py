@@ -25,6 +25,12 @@ def convert_to_standard_chat(example, num_images=0):
     return standard_chat
 
 
+# Keys that are aligned with `input_ids` (one entry per token) and therefore have to be
+# padded to the batch length instead of being concatenated. Gemma 4 returns
+# `mm_token_type_ids`, which the model uses to build the bidirectional image-block mask.
+TOKEN_ALIGNED_KEYS = ("token_type_ids", "mm_token_type_ids")
+
+
 @dataclass
 class DataCollator:
     tokenizer: PreTrainedTokenizer
@@ -60,10 +66,17 @@ class DataCollator:
             padding_value=self.processor.tokenizer.pad_token_id,
         )
         attention_mask = input_ids.ne(self.processor.tokenizer.pad_token_id)
-        inputs.pop("attention_mask")
+        inputs.pop("attention_mask", None)
         batched_inputs = {}
         for key, values in inputs.items():
-            batched_inputs[key] = torch.concatenate(values, dim=0)
+            if key in TOKEN_ALIGNED_KEYS:
+                batched_inputs[key] = self.pad_sequence(
+                    [value.squeeze(0) for value in values],
+                    batch_first=True,
+                    padding_value=0,
+                )
+            else:
+                batched_inputs[key] = torch.concatenate(values, dim=0)
         batched_inputs["input_ids"] = input_ids
         batched_inputs["attention_mask"] = attention_mask
 
@@ -120,14 +133,21 @@ class CacheDataset(Dataset):
                 add_generation_prompt=False
             )
 
+            # `text` already carries every special token written by the chat template
+            # (Gemma's template emits `bos_token` while its tokenizer would add another one).
             model_inputs = self.processor(
-                text=[text], return_tensors="pt", **multi_modal_inputs
+                text=[text],
+                return_tensors="pt",
+                add_special_tokens=False,
+                **multi_modal_inputs,
             )
         else:
             text = self.tokenizer.apply_chat_template(
                 row[self.text_key], tokenize=False, add_generation_prompt=False
             )
-            model_inputs = self.tokenizer([text], return_tensors="pt")
+            model_inputs = self.tokenizer(
+                [text], return_tensors="pt", add_special_tokens=False
+            )
 
         return model_inputs
 
@@ -199,18 +219,23 @@ class CacheIterableDataset(IterableDataset):
                 add_generation_prompt=False,
             )
 
+            # `text` already carries every special token written by the chat template
+            # (Gemma's template emits `bos_token` while its tokenizer would add another one).
             model_inputs = self.processor(
                 text=[text],
                 return_tensors="pt",
                 max_length=8192,
                 truncation=True,
+                add_special_tokens=False,
                 **multi_modal_inputs,
             )
         else:
             text = self.tokenizer.apply_chat_template(
                 row[self.text_key], tokenize=False, add_generation_prompt=False
             )
-            model_inputs = self.tokenizer([text], return_tensors="pt")
+            model_inputs = self.tokenizer(
+                [text], return_tensors="pt", add_special_tokens=False
+            )
 
         return model_inputs
 

@@ -36,7 +36,7 @@ def main():
 
     model_kwargs = {
         "attn_implementation": model_args.attn_implementation,
-        "torch_dtype": torch.bfloat16 if trainer_args.bf16 else torch.float32,
+        "dtype": torch.bfloat16 if trainer_args.bf16 else torch.float32,
         "model_name": model_args.model_path,
     }
 
