@@ -8,9 +8,13 @@ import wandb
 from sae import get_peft_sae_model
 from sae.launch.config import ModelArguments, SaeConfig, TrainingArguments
 from sae.trainer import DatasetStateCallback, SaeTrainer, load_dataset_state
-from sae.utils import hf_processor, hf_tokenizer
+from sae.utils import hf_http_patch, hf_processor, hf_tokenizer
 from sae.utils.datasets import CacheDataset, CacheIterableDataset
 from sae.utils.factory import ModelFactory, SaeFactory
+
+# Must run before any Hub request: huggingface_hub's retry loop otherwise closes the
+# client it is still holding, turning every retried SSL timeout into a hard crash.
+hf_http_patch.apply()
 
 try:
     if not os.environ.get("WANDB_API_KEY", None):
