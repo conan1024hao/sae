@@ -41,4 +41,5 @@ torchrun --nproc_per_node="8" --nnodes="1" --node_rank="0" --master_addr="127.0.
     --dead_tokens_threshold 100000 \
     --run_name $RUN_NAME \
     --streaming \
-    --accelerator_config '{"dispatch_batches":false}'
+    --accelerator_config '{"dispatch_batches":false}' \
+    "$@"   # extra flags, e.g. --resume_from_checkpoint <dir> (see auto_resume.sh)
