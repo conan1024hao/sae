@@ -32,6 +32,13 @@ TARGET_MODULE="model.embed_vision.embedding_projection"
 #   restarts from the newest checkpoint, so the save interval has to stay comfortably
 #   below the crash interval -- otherwise the run never reaches the next checkpoint and
 #   retries the same segment forever.
+#
+# --ddp_timeout 7200
+#   NCCL's default collective timeout is 600s. Once the httpx patch let SSL timeouts
+#   actually retry instead of crashing, a rank could sit in backoff long enough that the
+#   other seven waited past 600s at the gradient all-reduce, and the watchdog aborted the
+#   job (ALLREDUCE NumelIn=100664832, i.e. the SAE gradient, at step ~12951). Two hours
+#   is far longer than any observed stall.
 
 torchrun --nproc_per_node="8" --nnodes="1" --node_rank="0" --master_addr="127.0.0.1" --master_port="1234" \
     src/sae/launch/train.py \
@@ -51,6 +58,7 @@ torchrun --nproc_per_node="8" --nnodes="1" --node_rank="0" --master_addr="127.0.
     --learning_rate 5e-5 \
     --logging_steps 1 \
     --save_steps 250 \
+    --ddp_timeout 7200 \
     --output_dir checkpoints/$RUN_NAME \
     --save_total_limit 5 \
     --deepspeed ./examples/train/zero/zero2.json \

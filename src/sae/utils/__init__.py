@@ -1,4 +1,4 @@
-from . import hf_http_patch
+from . import hf_http_patch, nccl_timeout_patch
 from .sae_type import SaeType
 from .save_utils import get_peft_model_state_dict
 from .train_utils import hf_processor, hf_tokenizer
@@ -9,4 +9,5 @@ __all__ = [
     "get_peft_model_state_dict",
     "SaeType",
     "hf_http_patch",
+    "nccl_timeout_patch",
 ]
